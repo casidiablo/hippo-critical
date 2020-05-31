@@ -7,15 +7,19 @@ import datetime
 from dateutil.tz import tzlocal
 import json
 from sys import stderr
+import sys
+import os
+from pytz import timezone
 
 # list all video files
-# TODO parameterize path
-video_files = [f for f in listdir(".") if isfile(f) and f.endswith(".mkv")]
+dir=sys.argv[1]
+video_files = [f"{dir}/{f}" for f in listdir(dir) if isfile(f"{dir}/{f}") and f.endswith(".mkv")]
 
 # group files by day and extract their length
 videos_to_upload = {}
 for video in video_files:
-    start_time = video.replace(".mkv", "")
+    filename = os.path.basename(video)
+    start_time = filename.replace(".mkv", "")
     date_time = datetime.datetime.strptime(start_time, '%Y-%m-%d_%H-%M-%S')
     start_date = date_time.date()
 
@@ -29,24 +33,21 @@ for video in video_files:
 
 # process each day individually
 for date, videos in videos_to_upload.items():
-    destination_video = f"preprocessed/{date}.mkv"
+    destination_video = f"/workspace/{date}.mkv"
     subprocess.call(f"rm {destination_video}", shell=True) # just in case
 
     if len(videos) == 1:
         # just copy file to destination
-        subprocess.check_output(f"cp {videos[0]['filename']} {destination_video}")
+        subprocess.check_output(f"cp {videos[0]['filename']} {destination_video}", shell=True)
     else:
         sorted_videos = [v['filename'] for v in sorted(videos, key=lambda vid: vid['filename'])]
         for idx, video in enumerate(sorted_videos):
             print(f"Processing {video}", file=stderr)
             if idx == 0:
-                print(f"mkvmerge -o preprocessed/{date}.mkv {video} +{sorted_videos[idx+1]}; exit 0", file=stderr)
-                subprocess.check_output(f"mkvmerge -o preprocessed/{date}.mkv {video} +{sorted_videos[idx+1]}; exit 0", shell=True)
+                subprocess.check_output(f"mkvmerge -o /workspace/{date}.mkv {video} +{sorted_videos[idx+1]}; exit 0", shell=True)
             elif idx != len(videos) - 1:
-                print(f"mkvmerge -o preprocessed/{date}_temp.mkv preprocessed/{date}.mkv +{sorted_videos[idx+1]}; exit 0", file=stderr)
-                subprocess.check_output(f"mkvmerge -o preprocessed/{date}_temp.mkv preprocessed/{date}.mkv +{sorted_videos[idx+1]}; exit 0", shell=True)
-                subprocess.check_output(f"mv preprocessed/{date}_temp.mkv preprocessed/{date}.mkv", shell=True)
-            print("done", file=stderr)
+                subprocess.check_output(f"mkvmerge -o /workspace/{date}_temp.mkv /workspace/{date}.mkv +{sorted_videos[idx+1]}; exit 0", shell=True)
+                subprocess.check_output(f"mv /workspace/{date}_temp.mkv /workspace/{date}.mkv", shell=True)
 
     # attach metadata for this video from timewarrior
     timew_json = subprocess.check_output(["timew", "export"])
@@ -54,16 +55,24 @@ for date, videos in videos_to_upload.items():
     for record in json.loads(timew_json):
         # drop records that are not of this date
         record_start = record['start']
-        record_start_date = parser.parse(record_start).astimezone(tzlocal()).date()
+        record_start_date = parser.parse(record_start).astimezone(timezone('US/Pacific')).date()
         if str(record_start_date) == str(date) and 'tags' in record:
             for tag in record['tags']:
                 tag_count = tags_hist.get(tag, 0) + 1
                 tags_hist[tag] = tag_count
     title = [tag[0] for tag in sorted(tags_hist.items(), key=lambda item: item[1], reverse=True)][:2]
+    title = sorted(title, key=len)
     title = map(lambda tag: f"[{tag}]" if len(tag.split(" ")) == 1 else tag, title)
-    title = ', '.join(title)
-    metadata = {
-        'video': f'preprocessed/{date}.mkv',
-        'title': f'[{date}] {title}'
-    }
-    print(json.dumps(metadata))
+    title = ' '.join(title)
+
+    # since processing was successful, upload full video
+    subprocess.check_output(f"""python3 /youtube-upload-master/bin/youtube-upload \
+      --title "[{date}] {title}" \
+      --client-secrets=/youtube/client_secret.json \
+      --credentials-file=/youtube/youtube-upload-credentials.json \
+      --privacy private \
+      "{destination_video}" """, shell=True)
+
+    # if uploading finished successfully, delete originals
+    for vid in videos:
+        subprocess.call(f"rm {vid['filename']}", shell=True)
