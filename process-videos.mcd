@@ -6,27 +6,28 @@
 # @needs_tty true
 # @version 0.1.0
 # @enable_dynamic_volume_mounts true
-# @vol ~/.config/youtube:/youtube-config:ro
-# @vol ~/.timewarrior:/timewarrior:ro
+# @vol ~/.config/youtube:/config/youtube:ro
+# @vol ~/.timewarrior:/config/timewarrior:ro
 
 set -euo pipefail
 
+if [ $UID -eq 0 ] && [ -f /.dockerenv ]; then
+    # if this is executed as root inside a docker container
+    # then align with host user and group and re-launch
+    /app/align-users.sh temp_user temp_group
+    exec su -s /bin/bash temp_user "$0" -- "$@"
+fi
+
 # These are mounted on read-only-mode for security
 # so I copied them inside the container to make them writable
-cp -r /timewarrior /root/.timewarrior
-cp -r /youtube-config /youtube
+cp -r /config/timewarrior ~/.timewarrior
+cp -r /config/youtube /tmp/.youtube
 
-. argsparse.sh
-
+# arguments parsing
+. /app/argsparse.sh
 argsparse_use_option =rec-dir: "Directory of the recordings to process" mandatory
-
-# parse all the options. exits if invalid
 argsparse_parse_options "$@"
-
 directory=${program_options[rec-dir]}
 
-# Directory where files are processed
-mkdir /workspace
-
 # Run script that merges and uploads the video
-python3 upload-recordings.py "$directory"
+python3 /app/upload-recordings.py "$directory"

@@ -13,6 +13,7 @@ from pytz import timezone
 
 # list all video files
 dir=sys.argv[1]
+workspace_folder="/tmp"
 video_files = [f"{dir}/{f}" for f in listdir(dir) if isfile(f"{dir}/{f}") and f.endswith(".mkv")]
 
 # group files by day and extract their length
@@ -33,8 +34,8 @@ for video in video_files:
 
 # process each day individually
 for date, videos in videos_to_upload.items():
-    destination_video = f"/workspace/{date}.mkv"
-    subprocess.call(f"rm {destination_video}", shell=True) # just in case
+    destination_video = f"{workspace_folder}/{date}.mkv"
+    subprocess.call(f"rm {destination_video} 2> /dev/null", shell=True) # just in case
 
     if len(videos) == 1:
         # just copy file to destination
@@ -44,10 +45,10 @@ for date, videos in videos_to_upload.items():
         for idx, video in enumerate(sorted_videos):
             print(f"Processing {video}", file=stderr)
             if idx == 0:
-                subprocess.check_output(f"mkvmerge -o /workspace/{date}.mkv {video} +{sorted_videos[idx+1]}; exit 0", shell=True)
+                subprocess.check_output(f"mkvmerge -o {workspace_folder}/{date}.mkv {video} +{sorted_videos[idx+1]}; exit 0", shell=True)
             elif idx != len(videos) - 1:
-                subprocess.check_output(f"mkvmerge -o /workspace/{date}_temp.mkv /workspace/{date}.mkv +{sorted_videos[idx+1]}; exit 0", shell=True)
-                subprocess.check_output(f"mv /workspace/{date}_temp.mkv /workspace/{date}.mkv", shell=True)
+                subprocess.check_output(f"mkvmerge -o {workspace_folder}/{date}_temp.mkv {workspace_folder}/{date}.mkv +{sorted_videos[idx+1]}; exit 0", shell=True)
+                subprocess.check_output(f"mv {workspace_folder}/{date}_temp.mkv {workspace_folder}/{date}.mkv", shell=True)
 
     # attach metadata for this video from timewarrior
     timew_json = subprocess.check_output(["timew", "export"])
@@ -66,13 +67,13 @@ for date, videos in videos_to_upload.items():
     title = ' '.join(title)
 
     # since processing was successful, upload full video
-    subprocess.check_output(f"""python3 /youtube-upload-master/bin/youtube-upload \
+    subprocess.check_output(f"""python3 /app/youtube-upload/bin/youtube-upload \
       --title "[{date}] {title}" \
-      --client-secrets=/youtube/client_secret.json \
-      --credentials-file=/youtube/youtube-upload-credentials.json \
+      --client-secrets=/tmp/.youtube/client_secret.json \
+      --credentials-file=/tmp/.youtube/youtube-upload-credentials.json \
       --privacy private \
       "{destination_video}" """, shell=True)
-
+    
     # if uploading finished successfully, delete originals
     for vid in videos:
         subprocess.call(f"rm {vid['filename']}", shell=True)

@@ -3,13 +3,23 @@ RUN apt update && apt install -y wget python3 unzip jq mkvtoolnix timewarrior py
 
 RUN pip3 install --upgrade google-api-python-client oauth2client progressbar2 python-dateutil
 
-RUN wget https://github.com/tokland/youtube-upload/archive/master.zip && \
-  unzip master.zip
+RUN mkdir /app
 
-ADD https://raw.githubusercontent.com/Anvil/bash-argsparse/master/argsparse.sh /
-RUN chmod a+x argsparse.sh
+RUN wget https://github.com/tokland/youtube-upload/archive/master.zip -O youtube-upload.zip && \
+    unzip youtube-upload.zip && \
+    mv /youtube-upload-master /app/youtube-upload && \
+    rm youtube-upload.zip
 
-ADD upload-recordings.py /
-ADD process-videos.cmd /
+ADD https://raw.githubusercontent.com/Anvil/bash-argsparse/master/argsparse.sh /app
+RUN chmod a+x /app/argsparse.sh
 
-ENTRYPOINT [ "bash", "process-videos.cmd" ]
+ADD align-users.sh /app/
+RUN chmod a+x /app/align-users.sh
+
+ADD upload-recordings.py /app/
+ADD process-videos.mcd /app/process-videos
+
+# allow any user to read the code of this app
+RUN chmod a+r -R /app
+
+ENTRYPOINT [ "bash", "/app/process-videos" ]
