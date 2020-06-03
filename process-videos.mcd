@@ -9,6 +9,9 @@
 # @vol ~/.config/youtube:/config/youtube:ro
 # @vol ~/.timewarrior:/config/timewarrior:ro
 
+# NOTE: this is run using an application I developed which is not open source
+# yet. So better to just run `docker build .` and run with docker.
+
 set -euo pipefail
 
 if [ $UID -eq 0 ] && [ -f /.dockerenv ]; then
