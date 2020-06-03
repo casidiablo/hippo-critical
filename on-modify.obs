@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+read -r old < /dev/stdin
+read -r new < /dev/stdin
+echo "$new"
+
+echo "$new" > /tmp/new.json
+echo "$old" > /tmp/old.json
+
+# Started task.
+if [ "$(echo "$old" "$new" | jq -s '(.[0] | has("start") | not) and (.[1] | has("start"))' -r)" == "true" ]; then
+    nohup obs --startrecording --collection ~/recordings/workscene --profile ~/recordings/work --minimize-to-tray 0<&- &>/dev/null &
+fi
+
+# # Stopped task.
+if [ "$(echo "$old" "$new" | jq -s '(.[0] | has("start")) and (.[1] | has("start") | not)' -r)" == "true" ]; then
+    pkill obs || echo No recordings happening
+fi
